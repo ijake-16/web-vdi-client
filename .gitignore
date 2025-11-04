@@ -1,0 +1,10 @@
+# Rust (Backend)
+/server/target/
+/server/Cargo.lock
+
+# Node.js (Frontend)
+/client/node_modules/
+/client/dist/
+/client/.vite/
+
+*.log
