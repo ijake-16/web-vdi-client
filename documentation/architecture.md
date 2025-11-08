@@ -132,7 +132,7 @@
 
 -----
 
-## 5\. 3단계: 예상 문제 및 트러블슈팅 (Troubleshooting)
+## 5\. 3단계: 트러블슈팅 (Troubleshooting)
 
   * **오류:** `wasm-pack not found`
 
