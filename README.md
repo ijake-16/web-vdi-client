@@ -15,13 +15,28 @@
 
 ## 3. 핵심 아키텍처 (Architecture)
 
-
-
 본 프로젝트는 RDP 핵심 로직(`IronRDP`)을 서버가 아닌 클라이언트 브라우저(WASM)에서 직접 실행합니다. 브라우저의 보안 제약(TCP 직접 접근 불가)을 해결하기 위해, Axum 백엔드 서버가 **'WebSocket-to-TCP' 프록시** 역할을 수행합니다.
 
 1.  **Client (React + IronRDP WASM):** 브라우저가 RDP 패킷을 직접 처리하고, WebSocket을 통해 프록시로 전송합니다.
 2.  **Backend (Axum Gateway):** WebSocket 트래픽을 수신하여 순수 TCP 패킷으로 변환, 실제 RDP 호스트(Windows PC)로 중계합니다.
 3.  **Host (Windows PC):** RDP 세션을 제공합니다.
+
+### Project Structure
+
+```
+web-vdi-client/
+├── client/client/          # React-based web client
+│   ├── src/
+│   │   ├── components/    # UI components (Login, RemoteScreen, Toast)
+│   │   ├── contexts/      # React contexts (Session, Toast)
+│   │   ├── models/        # Data models
+│   │   └── types/         # TypeScript definitions
+│   ├── package.json
+│   └── README.md
+├── server/                # Rust/Axum WebSocket gateway (planned)
+├── documentation/         # Architecture and integration docs
+└── INTEGRATION.md         # IronRDP integration guide
+```
 
 ## 4. 기술 스택 (Tech Stack)
 
@@ -33,11 +48,46 @@
 
 ## 5. 개발 계획 (Roadmap)
 
-* **1단계: Web VDI 구현**
-    * `IronRDP/web-client` 예제 분석 및 재현 가능한 빌드 환경 구축.
-    * `Axum` 기반의 자체 WebSocket-to-TCP 프록시 게이트웨이 구현.
+* **1단계: Web VDI 구현** ✅ (Completed)
+    * `IronRDP/web-client` 예제 분석 및 React 기반 클라이언트 구현 완료.
+    * 로그인, 원격 화면, 토스트 알림 등 핵심 UI 컴포넌트 구현.
+    * `Axum` 기반의 자체 WebSocket-to-TCP 프록시 게이트웨이 구현 (예정).
 * **2단계: RBI 솔루션으로 확장**
     * RDP의 RemoteApp 기능을 활용, 원격 데스크톱 전체가 아닌 '격리된 단일 웹 브라우저'만 스트리밍하는 RBI 기능 구현.
 * **3단계: 보안 및 고급 기능**
     * Axum 게이트웨이에 사용자 인증, 세션 로깅 기능 추가.
     * 클립보드, 파일 전송 등 RDP 가상 채널을 제어/감사하는 보안 정책(DLP) 연구.
+
+## 6. Getting Started
+
+### React Client Setup
+
+1. Navigate to the client directory:
+```bash
+cd web-vdi-client/client/client
+```
+
+2. Run the setup script to integrate IronRDP:
+```bash
+./setup-ironrdp.sh
+```
+
+3. Start the development server:
+```bash
+npm run dev
+```
+
+4. Open your browser to `http://localhost:5173`
+
+For detailed integration instructions, see [INTEGRATION.md](./INTEGRATION.md).
+
+### Client Features
+
+- 🖥️ **Full RDP Support**: Connect to Windows RDP servers
+- 🔐 **Secure Authentication**: Token-based authentication support
+- 📋 **Clipboard Integration**: Bidirectional clipboard sharing
+- 🎨 **Modern UI**: Responsive design with gradient styling
+- ⚙️ **Flexible Configuration**: Adjustable desktop size, domain settings, and more
+- 🔧 **Debug Tools**: Built-in debug panel for development
+
+See [client/client/README.md](./client/client/README.md) for more details.

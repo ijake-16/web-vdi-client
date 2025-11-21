@@ -64,101 +64,537 @@
 
 ## 4\. 2단계: 빌드 및 실행 절차 (Step-by-Step)
 
-이 과정은 **2개의 터미널**을 동시에 사용하여 각각 '프록시 서버'와 '웹 서버'를 실행해야 합니다.
+이 과정은 **3개의 주요 서비스**를 동시에 실행해야 합니다:
+1. **Devolutions Gateway** (WebSocket-to-TCP 프록시)
+2. **Token Server** (자동 토큰 생성 서버)
+3. **IronRDP Svelte Client** (웹 브라우저 클라이언트)
 
 ### 4.1. 소스 코드 준비
 
-1.  회원님이 이전에 오디오 버그 수정을 위해 fork 했던 `IronRDP` 저장소를 클론합니다.
+1.  **IronRDP 저장소 클론:**
     ```bash
-    # "YOUR_GITHUB_USERNAME"을 실제 아이디로 변경하세요.
-    git clone https://github.com/YOUR_GITHUB_USERNAME/IronRDP.git
+    cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project
+    git clone https://github.com/Devolutions/IronRDP.git
     cd IronRDP
     ```
-2.  `web-client` 예제 디렉토리로 이동합니다.
+
+2.  **Rust 툴체인 버전 확인 및 설정:**
+    IronRDP는 특정 Rust 버전을 요구합니다. `rust-toolchain.toml` 파일에 명시된 버전을 사용해야 합니다.
     ```bash
-    cd web-client
+    # IronRDP 디렉토리에서 실행
+    cat rust-toolchain.toml
+    # channel = "1.88.0" 확인
+    
+    # 해당 버전 설치 및 설정
+    rustup install 1.88.0
+    rustup override set 1.88.0
+    
+    # 버전 확인
+    rustc --version
+    # 출력: rustc 1.88.0 ...
     ```
 
-### 4.2. (터미널 1) WebSocket 프록시 서버 빌드 및 실행
+3.  **Node.js 버전 확인:**
+    Vite는 Node.js 20.19+ 또는 22.12+ 버전을 요구합니다.
+    ```bash
+    node --version
+    # v20.19.0 이상 또는 v22.12.0 이상이어야 함
+    
+    # 버전이 낮다면 nvm으로 업그레이드
+    nvm install 22
+    nvm use 22
+    ```
 
-1.  `wsproxy` 디렉토리로 이동합니다.
-    ```bash
-    cd wsproxy
-    ```
-2.  프록시 서버를 빌드하고 실행합니다.
-      * 이 서버는 기본적으로 `127.0.0.1:8080`에서 WebSocket 연결을 수신 대기합니다.
-    <!-- end list -->
-    ```bash
-    # 빌드 및 실행
-    cargo run
-    ```
-3.  서버가 `Listening on 127.0.0.1:8080` 메시지를 출력하며 대기하는지 확인합니다. 이 터미널은 계속 실행 상태로 둡니다.
+### 4.2. Devolutions Gateway 설치 및 설정
 
-### 4.3. (터미널 2) WASM + React 클라이언트 빌드 및 실행
+Devolutions Gateway는 브라우저의 WebSocket 연결을 RDP 서버의 TCP 연결로 변환하는 프록시입니다.
 
-1.  **별도의 새 터미널 창**을 엽니다.
-2.  `web-client/client` 디렉토리로 이동합니다.
-    ```bash
-    # (IronRDP 루트 디렉토리에서 시작한다고 가정)
-    cd web-client/client
-    ```
-3.  `npm` 의존성을 설치합니다.
-    ```bash
-    npm install
-    ```
-4.  **WASM 및 JS 빌드:**
-      * `npm run build` 스크립트가 `wasm-pack`을 호출하여 Rust 코드를 WASM으로 컴파일하고, `vite`를 사용해 React 앱을 빌드합니다.
-    <!-- end list -->
-    ```bash
-    npm run build
-    ```
-5.  **웹 서버 실행:**
-      * 빌드된 결과물(`dist` 폴더)을 서빙하기 위해 개발 서버를 실행합니다.
-    <!-- end list -->
-    ```bash
-    npm run dev
-    ```
-6.  서버가 `http://localhost:5173` (또는 다른 포트)에서 실행되는지 확인합니다.
+#### 4.2.1. 저장소 클론 및 빌드
 
-### 4.4. 연결 테스트
+1.  **Gateway 클론:**
+    ```bash
+    cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project
+    git clone https://github.com/Devolutions/devolutions-gateway.git
+    cd devolutions-gateway
+    ```
 
-1.  웹 브라우저를 열고 `http://localhost:5173` (터미널 2에 표시된 주소)로 접속합니다.
-2.  IronRDP 웹 클라이언트 UI가 나타나면, 다음과 같이 연결 정보를 입력합니다.
-      * **WebSocket Proxy:** `ws://127.0.0.1:8080` (터미널 1이 리스닝 중인 주소)
-      * **Server:** `192.168.x.x` (연결할 **Windows PC의 실제 IP 주소**. Meshnet IP가 아닌 내부망 IP 또는 RDP가 가능한 IP)
-      * **Username:** `YOUR_PC\Username`
-      * **Password:** `YourPassword`
-3.  `Connect` 버튼을 클릭하여 브라우저 화면에 Windows 데스크톱이 나타나는지 확인합니다.
+2.  **Gateway 빌드 (Release 모드):**
+    ```bash
+    cargo build --bin devolutions-gateway --release
+    ```
+    빌드는 약 2-3분 소요됩니다. 완료되면 `target/release/devolutions-gateway` 바이너리가 생성됩니다.
+
+#### 4.2.2. Provisioner 키 생성
+
+Gateway는 토큰 서명/검증을 위한 RSA 키 쌍이 필요합니다.
+
+```bash
+# devolutions-gateway 디렉토리에서 실행
+openssl genrsa -out provisioner.key 2048
+openssl rsa -in provisioner.key -outform PEM -pubout -out provisioner.pem
+```
+
+생성된 파일:
+- `provisioner.key`: 개인 키 (토큰 생성용)
+- `provisioner.pem`: 공개 키 (토큰 검증용)
+
+#### 4.2.3. Gateway 설정 파일 생성
+
+1.  **기본 설정 파일 초기화:**
+    ```bash
+    DGATEWAY_CONFIG_PATH="$(pwd)" ./target/release/devolutions-gateway --config-init-only
+    ```
+    이 명령은 `gateway.json` 파일을 자동 생성합니다.
+
+2.  **설정 파일 수정:**
+    생성된 `gateway.json`을 다음과 같이 수정합니다:
+    ```json
+    {
+      "Id": "d6d9d143-e947-4273-9bce-5b45c37ac56f",
+      "ProvisionerPublicKeyFile": "provisioner.pem",
+      "ProvisionerPrivateKeyFile": "provisioner.key",
+      "TlsVerifyStrict": false,
+      "WebApp": {
+        "Enabled": false,
+        "StaticRootPath": ".",
+        "Authentication": "None"
+      },
+      "Listeners": [
+        {
+          "InternalUrl": "tcp://*:8181",
+          "ExternalUrl": "tcp://*:8181"
+        },
+        {
+          "InternalUrl": "http://*:7171",
+          "ExternalUrl": "http://*:7171"
+        }
+      ],
+      "__debug__": {
+        "disable_token_validation": true
+      }
+    }
+    ```
+
+    **주요 설정 설명:**
+    - `TlsVerifyStrict: false`: 개발 환경에서 TLS 인증서 검증 완화
+    - `WebApp.Enabled: false`: 내장 웹앱 비활성화 (우리는 Svelte 클라이언트 사용)
+    - `Listeners`: 포트 7171에서 HTTP WebSocket 수신
+    - `__debug__.disable_token_validation`: 토큰 재사용 허용 (개발 편의)
+
+#### 4.2.4. Gateway 실행 (터미널 1)
+
+```bash
+cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/devolutions-gateway
+DGATEWAY_CONFIG_PATH="$(pwd)" nohup ./target/release/devolutions-gateway > gateway.log 2>&1 &
+
+# 실행 확인
+lsof -i :7171
+# 출력: devolutio ... *:7171 (LISTEN)
+```
+
+### 4.3. Token Server 설치 및 실행
+
+Token Server는 Gateway 인증에 필요한 토큰을 자동으로 생성합니다.
+
+#### 4.3.1. Token Server 빌드 및 실행 (터미널 2)
+
+```bash
+cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/devolutions-gateway/tools/tokengen
+DGATEWAY_CONFIG_PATH="../../" cargo run --release -- server &
+
+# 실행 확인
+lsof -i :8080
+# 출력: tokengen ... localhost:http-alt (LISTEN)
+```
+
+Token Server는 `http://localhost:8080`에서 실행됩니다.
+
+### 4.4. WASM 빌드 (Docker 사용)
+
+WASM 빌드는 환경에 민감하므로 Docker를 사용하여 안정적으로 빌드합니다.
+
+#### 4.4.1. Docker로 WASM 빌드
+
+1.  **IronRDP 디렉토리로 이동:**
+    ```bash
+    cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/IronRDP
+    ```
+
+2.  **Docker를 사용한 WASM 빌드:**
+    ```bash
+    docker run --rm \
+      -v "$(pwd)":/workspace \
+      -w /workspace \
+      rust:1.88.0 \
+      bash -c "
+        rustup target add wasm32-unknown-unknown && \
+        cargo install wasm-pack --version 0.12.1 && \
+        cd crates/ironrdp-web && \
+        wasm-pack build --target web --out-dir pkg
+      "
+    ```
+
+    **빌드 시간:** 약 5-10분 소요
+
+3.  **빌드 결과 확인:**
+    ```bash
+    ls -lh crates/ironrdp-web/pkg/
+    ```
+    
+    생성된 파일:
+    - `ironrdp_web.js` (62KB)
+    - `ironrdp_web_bg.wasm` (3.9MB)
+    - `ironrdp_web.d.ts` (타입 정의)
+    - `ironrdp_web_bg.wasm.d.ts`
+
+### 4.5. Web Components 빌드
+
+IronRDP Svelte 클라이언트는 2개의 웹 컴포넌트를 사용합니다.
+
+#### 4.5.1. 의존성 설치
+
+```bash
+cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/IronRDP/web-client
+
+# iron-remote-desktop 의존성 설치
+cd iron-remote-desktop
+npm install
+
+# iron-remote-desktop-rdp 의존성 설치
+cd ../iron-remote-desktop-rdp
+npm install
+
+# iron-svelte-client 의존성 설치
+cd ../iron-svelte-client
+npm install
+```
+
+#### 4.5.2. 환경 변수 설정
+
+Token Server URL을 Svelte 클라이언트에 알려줍니다:
+
+```bash
+cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/IronRDP/web-client/iron-svelte-client
+echo 'VITE_IRON_TOKEN_SERVER_URL=http://localhost:8080' > .env
+```
+
+### 4.6. Svelte 클라이언트 빌드 및 실행 (터미널 3)
+
+#### 4.6.1. 웹 컴포넌트 빌드 및 클라이언트 실행
+
+```bash
+cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/IronRDP/web-client/iron-svelte-client
+
+# WASM 없이 웹 컴포넌트만 빌드하고 개발 서버 시작
+npm run dev-no-wasm
+```
+
+**이 명령이 수행하는 작업:**
+1. `iron-remote-desktop` 웹 컴포넌트 빌드 (121KB)
+2. `iron-remote-desktop-rdp` WASM 래퍼 빌드 (5.4MB)
+3. 빌드된 파일을 `static/` 폴더에 복사
+4. Vite 개발 서버 시작 (`http://localhost:5173`)
+
+#### 4.6.2. 서버 시작 확인
+
+```bash
+# 새 터미널에서 확인
+lsof -i :5173
+# 출력: node ... *:5173 (LISTEN)
+```
+
+브라우저에서 `http://localhost:5173`을 열면 IronRDP 로그인 화면이 나타납니다.
+
+### 4.7. RDP 연결 테스트
+
+#### 4.7.1. 브라우저 접속
+
+웹 브라우저를 열고 `http://localhost:5173`으로 이동합니다.
+
+#### 4.7.2. 연결 정보 입력
+
+로그인 폼에 다음 정보를 입력합니다:
+
+| 필드 | 값 | 설명 |
+|------|-----|------|
+| **Hostname** | `10.10.0.3:3389` | RDP 서버 IP:포트<br/>예: `192.168.1.100:3389` |
+| **Domain** | (비워둠) | Windows 도메인 (선택사항) |
+| **Username** | `Administrator` | RDP 사용자명 |
+| **Password** | `YourPassword` | RDP 비밀번호 |
+| **Gateway Address** | `ws://localhost:7171/jet/rdp` | Devolutions Gateway WebSocket URL<br/>**반드시 `/jet/rdp` 경로 포함** |
+| **AuthToken** | (비워둠) | 선택사항 (Token Server가 자동 생성) |
+| **Pre Connection Blob** | (비워둠) | 선택사항 |
+| **Desktop Width** | `1280` | 원격 데스크톱 해상도 너비 |
+| **Desktop Height** | `720` | 원격 데스크톱 해상도 높이 |
+| **KDC Proxy URL** | (비워둠) | Kerberos 관련 (선택사항) |
+| **Use Pop Up** | ☐ 체크 해제 | 팝업 사용 안 함 |
+| **Enable Clipboard** | ☑ 체크 | 클립보드 공유 활성화 |
+
+**중요 참고사항:**
+- **Gateway Address는 반드시 `ws://`로 시작**해야 합니다 (`http://` 아님)
+- 경로 `/jet/rdp`는 필수입니다
+- Hostname의 포트 번호는 RDP 서버의 포트 (기본값: 3389)
+
+#### 4.7.3. 연결 실행
+
+`Login` 버튼을 클릭합니다. 성공 시:
+1. 브라우저에 Windows 데스크톱 화면이 나타남
+2. 마우스/키보드 입력 가능
+3. 클립보드 공유 작동 (체크 시)
+
+### 4.8. 서비스 상태 확인
+
+모든 서비스가 정상 실행 중인지 확인:
+
+```bash
+echo "=== Service Status Check ==="
+lsof -i :7171 | grep -q devolutio && echo "✅ Gateway (7171)"
+lsof -i :8080 | grep -q tokengen && echo "✅ Token Server (8080)"
+lsof -i :5173 | grep -q node && echo "✅ Svelte Client (5173)"
+```
 
 -----
 
 ## 5\. 3단계: 트러블슈팅 (Troubleshooting)
 
-  * **오류:** `wasm-pack not found`
+### 5.1. 빌드 관련 오류
 
-      * **원인:** WASM 패키징 도구가 설치되지 않음.
-      * **해결:** `cargo install wasm-pack` 실행.
+#### 오류: `rustc 1.90.0` 버전 불일치
+```
+error: The "wasm_js" backend requires the wasm_js feature for getrandom
+```
 
-  * **오류:** `npm install` 실패
+**원인:** IronRDP는 `rust-toolchain.toml`에 명시된 정확한 Rust 버전이 필요합니다.
 
-      * **원인:** Node.js 또는 npm 버전이 호환되지 않음.
-      * **해결:** Node.js를 최신 LTS 버전으로 업데이트.
+**해결:**
+```bash
+cd IronRDP
+rustup install 1.88.0
+rustup override set 1.88.0
+rustc --version  # 1.88.0 확인
+```
 
-  * **오류:** 브라우저 콘솔(F12)에 `WebSocket connection failed`
+#### 오류: `wasm-pack not found`
 
-      * **원인 1:** 터미널 1의 `wsproxy` 서버가 실행 중이지 않음.
-      * **원인 2:** WebSocket 주소(`ws://127.0.0.1:8080`)를 잘못 입력함.
+**원인:** WASM 빌드 도구가 설치되지 않음.
 
-  * **오류:** `wsproxy` 터미널(터미널 1)에 `Connection timed out` 또는 `Connection refused`
+**해결:**
+```bash
+cargo install wasm-pack --version 0.12.1
+```
 
-      * **원인 1:** `Server` 필드에 입력한 RDP 호스트(Windows PC)의 IP 주소가 잘못됨.
-      * **원인 2:** Windows PC의 방화벽이 3389 포트를 차단하고 있음.
-      * **원인 3:** Windows PC의 NLA가 비활성화되지 않음.
+#### 오류: `npm install` - `EPERM: operation not permitted`
 
-  * **오류:** 브라우저 콘솔에 `CORS policy` 오류
+**원인:** Node.js/npm 권한 문제 또는 파일 시스템 잠금.
 
-      * **원인:** 웹 서버와 WebSocket 서버의 출처(origin)가 달라 발생.
-      * **해결:** `wsproxy` 서버 코드 또는 `Vite` 설정에서 CORS를 허용하도록 수정 필요. (이 경우 `wsproxy` 예제에 이미 반영되어 있을 가능성이 높음)
+**해결:**
+```bash
+# node_modules 삭제 후 재설치
+rm -rf node_modules package-lock.json
+npm install
+```
+
+#### 오류: Node.js 버전 불일치
+```
+You are using Node.js 20.17.0. Vite requires Node.js version 20.19+ or 22.12+
+```
+
+**해결:**
+```bash
+nvm install 22
+nvm use 22
+node --version  # v22.x.x 확인
+```
+
+### 5.2. Gateway 관련 오류
+
+#### 오류: Gateway 시작 실패 - `missing field ExternalUrl`
+
+**원인:** `gateway.json` 설정에서 필수 필드 누락.
+
+**해결:** `Listeners` 배열의 각 리스너에 `InternalUrl`과 `ExternalUrl` 모두 포함:
+```json
+"Listeners": [
+  {
+    "InternalUrl": "http://*:7171",
+    "ExternalUrl": "http://*:7171"
+  }
+]
+```
+
+#### 오류: `standalone web application path must be specified manually`
+
+**원인:** macOS에서는 WebApp 경로를 명시해야 함.
+
+**해결:** `gateway.json`에 WebApp 설정 추가:
+```json
+"WebApp": {
+  "Enabled": false,
+  "StaticRootPath": ".",
+  "Authentication": "None"
+}
+```
+
+#### 오류: Gateway 로그 - `invalid config file ... missing field Authentication`
+
+**원인:** WebApp이 활성화된 상태에서 Authentication 필드 누락.
+
+**해결:** `"Authentication": "None"` 추가 (위 예제 참조)
+
+### 5.3. Token Server 관련 오류
+
+#### 오류: Token Server가 시작되지 않음
+
+**원인:** `DGATEWAY_CONFIG_PATH` 환경 변수가 설정되지 않음.
+
+**해결:**
+```bash
+cd devolutions-gateway/tools/tokengen
+DGATEWAY_CONFIG_PATH="../../" cargo run --release -- server
+```
+
+#### 포트 충돌: `Address already in use (port 8080)`
+
+**원인:** 다른 프로세스가 8080 포트를 사용 중.
+
+**해결:**
+```bash
+# 프로세스 확인 및 종료
+lsof -i :8080
+kill -9 <PID>
+```
+
+### 5.4. Svelte 클라이언트 오류
+
+#### 오류: `Failed to resolve import "../../../static/iron-remote-desktop-rdp"`
+
+**원인:** WASM 또는 웹 컴포넌트가 빌드되지 않음.
+
+**해결:**
+```bash
+cd IronRDP/web-client/iron-svelte-client
+npm run dev-no-wasm
+```
+이 명령은 자동으로 웹 컴포넌트를 빌드하고 `static/` 폴더에 복사합니다.
+
+#### 오류: `npm run dev-no-wasm` 실패
+
+**원인:** 웹 컴포넌트 디렉토리에 의존성이 설치되지 않음.
+
+**해결:**
+```bash
+cd IronRDP/web-client/iron-remote-desktop
+npm install
+
+cd ../iron-remote-desktop-rdp
+npm install
+
+cd ../iron-svelte-client
+npm install
+npm run dev-no-wasm
+```
+
+### 5.5. 연결 관련 오류
+
+#### 오류: 브라우저 콘솔 - `WebSocket connection to 'ws://localhost:7171/jet/rdp' failed`
+
+**원인 1:** Devolutions Gateway가 실행 중이지 않음.
+```bash
+lsof -i :7171  # 확인
+```
+
+**원인 2:** Gateway Address URL이 잘못됨.
+- ✅ 올바른 형식: `ws://localhost:7171/jet/rdp`
+- ❌ 잘못된 형식: `http://localhost:7171/jet/rdp` (http 사용)
+- ❌ 잘못된 형식: `ws://localhost:7171` (경로 누락)
+
+**원인 3:** Gateway 로그에 오류 확인:
+```bash
+tail -f devolutions-gateway/gateway.log
+```
+
+#### 오류: 연결 후 검은 화면만 나타남
+
+**원인 1:** RDP 서버(Windows PC)가 응답하지 않음.
+- RDP 서버의 IP 주소가 정확한지 확인
+- RDP 서버의 방화벽이 3389 포트를 허용하는지 확인
+- `ping <RDP_SERVER_IP>`로 네트워크 연결 확인
+
+**원인 2:** NLA(Network Level Authentication)가 활성화됨.
+- Windows 설정 > 원격 데스크톱 > "네트워크 수준 인증이 필요" 체크 해제
+
+#### 오류: `STATUS_LOGON_FAILURE` 또는 인증 실패
+
+**원인:** 사용자 이름 또는 비밀번호가 잘못됨.
+
+**해결:**
+1. Username 형식 확인:
+   - 로컬 계정: `Administrator` 또는 `ComputerName\Username`
+   - 도메인 계정: `DOMAIN\Username`
+2. Windows에서 실제 계정 이름 확인:
+   ```powershell
+   whoami
+   ```
+3. 비밀번호에 특수문자가 있다면 URL 인코딩 필요 없음 (폼에 그대로 입력)
+
+#### 오류: Token Server 연결 실패
+
+**증상:** 브라우저 콘솔에 `Failed to fetch token from http://localhost:8080`
+
+**원인:** `.env` 파일이 없거나 Token Server가 실행되지 않음.
+
+**해결:**
+```bash
+# .env 파일 생성
+cd IronRDP/web-client/iron-svelte-client
+echo 'VITE_IRON_TOKEN_SERVER_URL=http://localhost:8080' > .env
+
+# Token Server 실행 확인
+lsof -i :8080
+
+# 없다면 실행
+cd ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/devolutions-gateway/tools/tokengen
+DGATEWAY_CONFIG_PATH="../../" cargo run --release -- server &
+```
+
+### 5.6. 성능 관련 문제
+
+#### 문제: 화면이 느리거나 버벅임
+
+**해결:**
+1. Desktop Width/Height를 낮춤 (예: 1024x576)
+2. 브라우저 하드웨어 가속 활성화 확인
+3. 네트워크 대역폭 확인 (`ping <RDP_SERVER>`)
+
+#### 문제: 클립보드 공유가 작동하지 않음
+
+**해결:**
+1. "Enable Clipboard" 체크 확인
+2. 브라우저 클립보드 권한 허용 (브라우저 주소창 자물쇠 아이콘)
+3. RDP 서버에서 클립보드 리디렉션이 허용되는지 확인
+
+### 5.7. 디버깅 팁
+
+#### Gateway 로그 실시간 확인
+```bash
+tail -f ~/Desktop/KAIST/2025Fall/CS408\ CS\ Project/devolutions-gateway/gateway.log
+```
+
+#### 브라우저 개발자 도구 사용
+1. F12를 눌러 개발자 도구 열기
+2. **Console 탭**: JavaScript 오류 확인
+3. **Network 탭**: WebSocket 연결 상태 확인
+4. **Application 탭**: LocalStorage/환경 변수 확인
+
+#### 모든 서비스 재시작
+```bash
+# 모든 관련 프로세스 종료
+pkill -f devolutions-gateway
+pkill -f tokengen
+pkill -f "vite dev"
+
+# 순서대로 재시작 (위 4.2 ~ 4.6 섹션 참조)
+```
 
 ## 6\. 향후 계획 (Next Steps)
 
